@@ -236,7 +236,11 @@ class LightnCandy {
         if ($partial && !$context['flags']['runpart']) {
             array_pop($context['partialStack']);
         }
-
+/*
+        echo "code: $code \n";
+        echo "template: $template \n";
+        die;
+*/
         return "$code$template";
     }
 
@@ -522,13 +526,26 @@ $libstr
 
         if ($context['flags']['runpart']) {
             $code = static::compileTemplate($context, $context['usedPartial'][$name], $name);
+            $partial = "{$context['ops']['op_start']}'$code'{$context['ops']['op_end']}";
             if ($context['flags']['mustpi']) {
+                $partial = "
+                \$tempfunc = function () use(\$cx, \$in) {
+                    $partial
+                };
+                \$str = \$tempfunc();
+                return implode(\"\\n\",
+                    array_map(
+                        function (\$line) use(\$sp) {
+                            {$context['ops']['op_start']} \$sp {$context['ops']['seperator']} \$line {$context['ops']['op_end']}
+                        },
+                        explode(\"\\n\", \$str)
+                    )
+                );";
                 $sp = ', $sp';
-                $code = preg_replace('/^/m', "'{$context['ops']['seperator']}\$sp{$context['ops']['seperator']}'", $code);
             } else {
                 $sp = '';
             }
-            $context['partialCode'] .= "'$name' => function (\$cx, \$in{$sp}) {{$context['ops']['op_start']}'$code'{$context['ops']['op_end']}},";
+            $context['partialCode'] .= "'$name' => function (\$cx, \$in$sp) { $partial },";
         }
     }
 
@@ -1241,6 +1258,7 @@ $libstr
             $vars = ($count > 0) ? $matchedall[2] : explode(' ', $token[self::POS_INNERTAG]);
         }
 
+
         // Check for advanced variable.
         $ret = array();
         $i = 0;
@@ -1253,7 +1271,7 @@ $libstr
             }
 
             if ($context['flags']['namev']) {
-                if (preg_match('/^((\\[([^\\]]+)\\])|([^=^["]+))=(.+)$/', $var, $m)) {
+                if (preg_match('/^((\\[([^\\]]+)\\])|([^=^["\']+))=(.+)$/', $var, $m)) {
                     if (!$context['flags']['advar'] && $m[3]) {
                         $context['error'][] = "Wrong argument name as '[$m[3]]' in " . static::tokenString($token) . ' ! You should fix your template or compile with LightnCandy::FLAG_ADVARNAME flag.';
                     }
@@ -1290,6 +1308,7 @@ $libstr
                 $i++;
             }
         }
+        //var_dump($ret);die;
 
         return array(($token[self::POS_BEGINTAG] === '{{{') || ($token[self::POS_OP] === '&') || $context['flags']['noesc'], $ret);
     }
